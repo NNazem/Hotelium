@@ -22,7 +22,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	lis, err := net.Listen("tcp", ":50052")
+	lis, err := net.Listen("tcp", ":50054")
 	if err != nil {
 		log.Fatalf("Failed to listen %v", err)
 	}

@@ -4,6 +4,8 @@ import (
 	"Hotelium/rooms/pkg/rooms"
 	"context"
 	"github.com/jmoiron/sqlx"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log"
 )
 
@@ -41,7 +43,7 @@ func (s *RoomServiceServer) CreateRoom(ctx context.Context, req *rooms.CreateRoo
 	err := s.db.QueryRowContext(ctx, query, room.Name, room.RoomType, room.Price).Scan(&room.Id)
 
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "Failed to create room: %v")
 	}
 	return &rooms.CreateRoomResponse{Room: room}, nil
 }
@@ -54,7 +56,7 @@ func (s *RoomServiceServer) GetRoom(ctx context.Context, req *rooms.GetRoomReque
 	err := s.db.GetContext(ctx, &room, query, req.Id)
 
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.NotFound, "Room not found")
 	}
 
 	log.Println("Room found: %v", room.GetId())
@@ -69,7 +71,6 @@ func (s *RoomServiceServer) ListRooms(ctx context.Context, req *rooms.ListRoomsR
 	err := s.db.SelectContext(ctx, &listRooms, query)
 
 	if err != nil {
-		log.Fatalf(err.Error())
 		return nil, err
 	}
 

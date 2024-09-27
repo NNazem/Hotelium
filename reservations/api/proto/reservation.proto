@@ -20,8 +20,8 @@ service ReservationService {
 message Reservation {
   int32 id = 1;
   int32 roomId = 2;
-  google.protobuf.Timestamp startingDate = 3;
-  google.protobuf.Timestamp endDate = 4;
+  string startingDate = 3;
+  string endDate = 4;
 }
 
 message CreateReservationRequest {
