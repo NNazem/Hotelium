@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "reservations/pkg/reservations";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+
+service ReservationService {
+  rpc CreateReservation(CreateReservationRequest) returns (CreateReservationResponse) {
+    option (google.api.http) = {
+      post: "/v1/reservations"
+      body: "*"
+    };
+  }
+}
+
+message Reservation {
+  int32 id = 1;
+  int32 roomId = 2;
+  google.protobuf.Timestamp startingDate = 3;
+  google.protobuf.Timestamp endDate = 4;
+}
+
+message CreateReservationRequest {
+  Reservation reservation = 1;
+}
+
+message CreateReservationResponse {
+  Reservation reservation = 1;
+}

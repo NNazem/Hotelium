@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package api;
+
+option go_package = "reservations/pkg/rooms";
+
+service RoomService {
+  rpc CreateRoom (CreateRoomRequest) returns (CreateRoomResponse);
+  rpc GetRoom (GetRoomRequest) returns (GetRoomResponse);
+  rpc ListRooms (ListRoomsRequest) returns (ListRoomsResponse);
+}
+
+message Room {
+  int32 id = 1;
+  string name = 2;
+  string roomType = 3;
+  float price = 4;
+}
+
+message CreateRoomRequest {
+  Room room = 1;
+}
+
+message CreateRoomResponse {
+  Room room = 1;
+}
+
+message GetRoomRequest {
+  int32 id = 1;
+}
+
+message GetRoomResponse {
+  Room room = 1;
+}
+
+message ListRoomsRequest {}
+
+message ListRoomsResponse {
+  repeated Room rooms = 1;
+}
