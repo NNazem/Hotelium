@@ -38,10 +38,10 @@ func (s *RoomServiceServer) CreateRoom(ctx context.Context, req *rooms.CreateRoo
 	room := req.Room
 
 	query := `INSERT INTO rooms (name, roomType, price) VALUES ($1, $2, $3) RETURNING id`
-	err := s.db.QueryRowContext(ctx, query, room.Name, room.RoomType, room.Price)
+	err := s.db.QueryRowContext(ctx, query, room.Name, room.RoomType, room.Price).Scan(&room.Id)
 
 	if err != nil {
-		return nil, err.Err()
+		return nil, err
 	}
 	return &rooms.CreateRoomResponse{Room: room}, nil
 }

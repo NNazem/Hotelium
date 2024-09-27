@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	db, err := sqlx.Connect("postgres", "user=root dbname=hotelium sslmode=disable password=secret host=localhost")
+	db, err := sqlx.Connect("postgres", "user=navidnazem dbname=hotelium sslmode=disable password= host=localhost")
 
 	if err != nil {
 		log.Fatalln(err)
