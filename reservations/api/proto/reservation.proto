@@ -15,6 +15,14 @@ service ReservationService {
       body: "*"
     };
   }
+
+  rpc CancelReservation(CancelReservationRequest) returns (CancelReservationResponse) {
+    option (google.api.http) = {
+      delete: "/v1/reservations"
+      body: "*"
+    };
+  }
+
 }
 
 message Reservation {
@@ -30,4 +38,12 @@ message CreateReservationRequest {
 
 message CreateReservationResponse {
   Reservation reservation = 1;
+}
+
+message CancelReservationRequest {
+  int32 id = 1;
+}
+
+message CancelReservationResponse {
+  string message = 1;
 }

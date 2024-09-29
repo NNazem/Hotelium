@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jmoiron/sqlx"
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"google.golang.org/grpc"
 	"log"
 	"time"
@@ -14,7 +16,8 @@ import (
 
 type ReservationServiceServer struct {
 	reservations.UnimplementedReservationServiceServer
-	db *sqlx.DB
+	db         *sqlx.DB
+	roomClient roomspb.RoomServiceClient
 }
 
 func ensureReservationTableExists(db *sqlx.DB) error {
@@ -38,70 +41,60 @@ func NewReservationServer(dbPassed *sqlx.DB) *ReservationServiceServer {
 		log.Fatalf("Failed to create the table Reservation: %v", err)
 	}
 
-	return &ReservationServiceServer{db: dbPassed}
-}
-
-func validateReservationDates(startingDate string, endDate string) (time.Time, time.Time, error) {
-	startingTimeParsed, err := time.Parse(time.RFC3339, startingDate)
-
+	conn, err := grpc.Dial("localhost:50053", grpc.WithInsecure())
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("invalid starting date: %v", startingDate)
+		log.Printf("Failed to connect to server: %v", err)
 	}
 
-	endDateParsed, err := time.Parse(time.RFC3339, endDate)
+	roomClient := roomspb.NewRoomServiceClient(conn)
 
-	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("invalid ending date: %v", endDate)
-	}
-
-	if startingTimeParsed.Before(time.Now()) {
-		return time.Time{}, time.Time{}, fmt.Errorf("Invalid reservation: starting date can't be before today %v", startingDate)
-	}
-
-	if endDateParsed.Before(startingTimeParsed) {
-		return time.Time{}, time.Time{}, fmt.Errorf("Invalid reservation: ending date can't be before starting date %v", endDate)
-	}
-
-	return startingTimeParsed, endDateParsed, nil
+	return &ReservationServiceServer{db: dbPassed, roomClient: roomClient}
 }
 
 func (s *ReservationServiceServer) CreateReservation(ctx context.Context, req *reservations.CreateReservationRequest) (*reservations.CreateReservationResponse, error) {
 	reservation := req.Reservation
 
 	if reservation == nil {
+		log.Printf("Reservation can't be nil")
 		return nil, errors.New("reservation cannot be nil")
 	}
 
 	if reservation.StartingDate == "" {
+		log.Printf("Reservation starting date can't be empty")
 		return nil, errors.New("startingDate cannot be blank")
 	}
 
 	if reservation.EndDate == "" {
+		log.Printf("Reservation ending date can't be empty")
 		return nil, errors.New("endDate cannot be blank")
 	}
+
+	log.Printf("Startint the creation of a reservation for room: %v", req.Reservation.RoomId)
 
 	startingTimeParsed, endDateParsed, err := validateReservationDates(reservation.StartingDate, reservation.EndDate)
 
 	if err != nil {
 		return nil, err
 	}
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 
-	err = isValidRoomId(ctx, reservation)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var count int
-
-	query := `SELECT COUNT(*) FROM reservations WHERE roomId = $1 AND startingDate = $2`
-	err = s.db.GetContext(ctx, &count, query, reservation.RoomId, startingTimeParsed)
+	err = s.isValidRoomId(ctx, reservation)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if count > 0 {
+	var exists bool
+
+	query := `SELECT EXISTS(SELECT 1 FROM reservations WHERE roomId = $1 AND startingDate = $2)`
+	err = s.db.GetContext(ctx, &exists, query, reservation.RoomId, startingTimeParsed)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if exists {
+		log.Printf("Reservation with roomId %v already exists", req.Reservation.RoomId)
 		return nil, fmt.Errorf("There is already a reservation for the room for that day.")
 	}
 
@@ -112,22 +105,96 @@ func (s *ReservationServiceServer) CreateReservation(ctx context.Context, req *r
 		return nil, err
 	}
 
+	log.Printf("Reservation created for room: %v", req.Reservation.RoomId)
+	sendEmail("Reservation confirmed", "Reservation confirmed")
+
 	return &reservations.CreateReservationResponse{Reservation: reservation}, nil
 }
 
-func isValidRoomId(ctx context.Context, reservation *reservations.Reservation) error {
-	conn, err := grpc.Dial("localhost:50053", grpc.WithInsecure())
-	if err != nil {
-		return fmt.Errorf("Failed to connect to RoomService: %v", err)
-	}
-	defer conn.Close()
+func (s *ReservationServiceServer) CancelReservation(ctx context.Context, req *reservations.CancelReservationRequest) (*reservations.CancelReservationResponse, error) {
+	id := req.Id
 
-	roomClient := roomspb.NewRoomServiceClient(conn)
+	if id < 0 {
+		log.Printf("The provided reservatio id is not valid.")
+		return nil, errors.New("Reservation cannot be cancelled, the provided reservatio id is not valid.")
+	}
+
+	query := `DELETE from reservations WHERE id = $1`
+	result, err := s.db.ExecContext(ctx, query, id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if rowsAffected == 0 {
+		log.Printf("Reservation with id %v not found", id)
+		return nil, errors.New("Reservation cannot be cancelled, the provided reservation id is not valid.")
+	}
+
+	sendEmail("Reservation cancelled", "Reservation cancelled")
+
+	return &reservations.CancelReservationResponse{Message: "Reservation cancelled successfully"}, nil
+}
+
+func validateReservationDates(startingDate string, endDate string) (time.Time, time.Time, error) {
+	startingTimeParsed, err := time.Parse(time.RFC3339, startingDate)
+
+	if err != nil {
+		log.Printf("Failed to parse the starting date: %v", err)
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid starting date: %v", startingDate)
+	}
+
+	endDateParsed, err := time.Parse(time.RFC3339, endDate)
+
+	if err != nil {
+		log.Printf("Failed to parse the ending date: %v", err)
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid ending date: %v", endDate)
+	}
+
+	if startingTimeParsed.Before(time.Now()) {
+		log.Printf("The starting date cannot be in the past")
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid reservation: starting date can't be before today %v", startingDate)
+	}
+
+	if endDateParsed.Before(startingTimeParsed) {
+		log.Printf("The ending date cannot be before the starting date")
+		return time.Time{}, time.Time{}, fmt.Errorf("Invalid reservation: ending date can't be before starting date %v", endDate)
+	}
+
+	return startingTimeParsed, endDateParsed, nil
+}
+
+func sendEmail(subject, body string) error {
+	from := mail.NewEmail("Hotelium", "projectxmk2@gmail.com")
+	to := mail.NewEmail("Navid Nazem", "nazem.navid@gmail.com")
+	plainTextContent := body
+	htmlContent := fmt.Sprintf("<strong>%s</strong>", body)
+	message := mail.NewSingleEmail(from, subject, to, plainTextContent, htmlContent)
+
+	client := sendgrid.NewSendClient("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")
+	response, err := client.Send(message)
+	if err != nil {
+		log.Printf("Failed to send email: %v", err)
+		return err
+	}
+
+	log.Printf("Email sent successfully: %v", response)
+	return nil
+}
+
+func (s *ReservationServiceServer) isValidRoomId(ctx context.Context, reservation *reservations.Reservation) error {
 
 	roomReq := &roomspb.GetRoomRequest{Id: reservation.RoomId}
-	_, err = roomClient.GetRoom(ctx, roomReq)
+	_, err := s.roomClient.GetRoom(ctx, roomReq)
 
 	if err != nil {
+		log.Printf("Failed to get room: %v", err)
 		return fmt.Errorf("Room with id: %v not found", reservation.RoomId)
 	}
 
