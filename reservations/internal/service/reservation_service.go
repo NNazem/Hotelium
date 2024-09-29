@@ -10,6 +10,8 @@ import (
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log"
 	"time"
 )
@@ -140,6 +142,37 @@ func (s *ReservationServiceServer) CancelReservation(ctx context.Context, req *r
 	sendEmail("Reservation cancelled", "Reservation cancelled")
 
 	return &reservations.CancelReservationResponse{Message: "Reservation cancelled successfully"}, nil
+}
+
+func (s *ReservationServiceServer) RoomAvailability(ctx context.Context, req *reservations.RoomAvailabilityRequest) (*reservations.RoomAvailabilityResponse, error) {
+	var roomsResults []roomspb.Room
+	var availableRooms []*roomspb.Room
+
+	if req.GetStartingDate() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "startingDate is required")
+	}
+
+	query := `SELECT * FROM rooms WHERE id NOT IN (
+    SELECT r.id FROM rooms as r 
+    JOIN reservations as re ON r.id = re.roomid 
+    WHERE re.startingdate >= $1)`
+
+	err := s.db.SelectContext(ctx, &roomsResults, query, req.GetStartingDate())
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, room := range roomsResults {
+		availableRooms = append(availableRooms, &roomspb.Room{
+			Id:       room.Id,
+			Name:     room.Name,
+			RoomType: room.RoomType,
+			Price:    room.Price,
+		})
+	}
+
+	return &reservations.RoomAvailabilityResponse{Rooms: availableRooms}, nil
 }
 
 func validateReservationDates(startingDate string, endDate string) (time.Time, time.Time, error) {
