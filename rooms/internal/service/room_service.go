@@ -3,6 +3,7 @@ package service
 import (
 	"Hotelium/rooms/pkg/rooms"
 	"context"
+	"fmt"
 	"github.com/jmoiron/sqlx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -75,4 +76,20 @@ func (s *RoomServiceServer) ListRooms(ctx context.Context, req *rooms.ListRoomsR
 	}
 
 	return &rooms.ListRoomsResponse{Rooms: listRooms}, nil
+}
+
+func (s *RoomServiceServer) SearchRoomByName(ctx context.Context, req *rooms.SearchRoomByNameRequest) (*rooms.SearchRoomByNameResponse, error) {
+	var listRooms []*rooms.Room
+
+	roomNameFormatted := fmt.Sprintf("%%%s%%", req.RoomName)
+
+	query := `SELECT * FROM rooms WHERE name LIKE $1`
+
+	err := s.db.SelectContext(ctx, &listRooms, query, roomNameFormatted)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &rooms.SearchRoomByNameResponse{Room: listRooms}, nil
 }

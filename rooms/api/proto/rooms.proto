@@ -8,6 +8,7 @@ service RoomService {
   rpc CreateRoom (CreateRoomRequest) returns (CreateRoomResponse);
   rpc GetRoom (GetRoomRequest) returns (GetRoomResponse);
   rpc ListRooms (ListRoomsRequest) returns (ListRoomsResponse);
+  rpc SearchRoomByName (SearchRoomByNameRequest) returns (SearchRoomByNameResponse);
 }
 
 message Room {
@@ -37,4 +38,12 @@ message ListRoomsRequest {}
 
 message ListRoomsResponse {
   repeated Room rooms = 1;
+}
+
+message SearchRoomByNameRequest{
+  string roomName = 1;
+}
+
+message SearchRoomByNameResponse{
+  repeated Room room = 1;
 }
