@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/reflection"
 	"log"
 	"net"
+	"os"
 )
 
 func main() {
@@ -18,7 +19,7 @@ func main() {
 	}
 	defer db.Close()
 	// Creiamo un listener TCP che ascolterà le richieste in arrivo sulla porta specificata.
-	lis, err := net.Listen("tcp", ":50053")
+	lis, err := net.Listen("tcp", os.Args[1])
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}

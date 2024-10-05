@@ -39,11 +39,17 @@ func ensureReservationTableExists(db *sqlx.DB) error {
 func NewReservationServer(dbPassed *sqlx.DB) *ReservationServiceServer {
 	err := ensureReservationTableExists(dbPassed)
 
+	//addresses := []string{"localhost:50051", "localhost:50052"}
+
 	if err != nil {
 		log.Fatalf("Failed to create the table Reservation: %v", err)
 	}
 
-	conn, err := grpc.Dial("localhost:50053", grpc.WithInsecure())
+	conn, err := grpc.Dial(
+		"localhost:50051,localhost:50052", // Use a comma-separated list of addresses
+		grpc.WithInsecure(),
+		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`), // Enable round-robin load balancing
+	)
 	if err != nil {
 		log.Printf("Failed to connect to server: %v", err)
 	}

@@ -8,11 +8,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
+	"sync"
 )
 
 type RoomServiceServer struct {
 	rooms.UnimplementedRoomServiceServer
-	db *sqlx.DB
+	db      *sqlx.DB
+	dbMutex sync.Mutex
 }
 
 func ensureRoomTableExists(db *sqlx.DB) error {
@@ -38,6 +40,8 @@ func NewRoomServiceServer(dbPassed *sqlx.DB) *RoomServiceServer {
 }
 
 func (s *RoomServiceServer) CreateRoom(ctx context.Context, req *rooms.CreateRoomRequest) (*rooms.CreateRoomResponse, error) {
+
+	s.dbMutex.Lock()
 	room := req.Room
 
 	query := `INSERT INTO rooms (name, roomType, price) VALUES ($1, $2, $3) RETURNING id`
@@ -46,6 +50,8 @@ func (s *RoomServiceServer) CreateRoom(ctx context.Context, req *rooms.CreateRoo
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to create room: %v")
 	}
+
+	s.dbMutex.Unlock()
 	return &rooms.CreateRoomResponse{Room: room}, nil
 }
 
@@ -92,4 +98,18 @@ func (s *RoomServiceServer) SearchRoomByName(ctx context.Context, req *rooms.Sea
 	}
 
 	return &rooms.SearchRoomByNameResponse{Room: listRooms}, nil
+}
+
+func (s *RoomServiceServer) UpdateRoom(ctx context.Context, req *rooms.UpdateRoomRequest) (*rooms.UpdateRoomResponse, error) {
+	room := req.Room
+
+	query := `UPDATE rooms SET name = $1, roomType = $2, price = $3 WHERE id = $4`
+
+	_, err := s.db.ExecContext(ctx, query, &room.Name, &room.RoomType, &room.Price, &room.Id)
+
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to update room: %v")
+	}
+
+	return &rooms.UpdateRoomResponse{Room: room}, nil
 }

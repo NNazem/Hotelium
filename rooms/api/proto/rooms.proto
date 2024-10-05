@@ -9,6 +9,7 @@ service RoomService {
   rpc GetRoom (GetRoomRequest) returns (GetRoomResponse);
   rpc ListRooms (ListRoomsRequest) returns (ListRoomsResponse);
   rpc SearchRoomByName (SearchRoomByNameRequest) returns (SearchRoomByNameResponse);
+  rpc UpdateRoom (UpdateRoomRequest) returns (UpdateRoomResponse);
 }
 
 message Room {
@@ -16,6 +17,14 @@ message Room {
   string name = 2;
   string roomType = 3;
   float price = 4;
+}
+
+message UpdateRoomRequest{
+  Room room = 1;
+}
+
+message UpdateRoomResponse {
+  Room room = 2;
 }
 
 message CreateRoomRequest {
