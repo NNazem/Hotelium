@@ -1,1 +1,1 @@
-Simple test project to test gRPC and Go
+Simple test project to try out gRPC and Go
